@@ -1,5 +1,3 @@
-# PowerShell script for safe commit, rebase, and push
-
 param (
     [string]$CommitMessage = "Auto commit before combining with remote"
 )
@@ -9,7 +7,7 @@ git add .
 try {
     git commit -m "$CommitMessage"
 } catch {
-    Write-Host "ℹ️ Nothing to commit."
+    Write-Host "ℹ️ Nothing to commit or already committed."
 }
 
 Write-Host "📥 Stashing changes before pulling..."
@@ -25,22 +23,26 @@ try {
 }
 
 Write-Host "📤 Applying stashed changes..."
-git stash apply
+try {
+    git stash apply
+} catch {
+    Write-Host "⚠️ No stash found or nothing to apply."
+}
 
-Write-Host "⚔️ Resolving conflicts in favor of your local changes..."
+Write-Host "⚔️ Resolving conflicts in favor of your stashed changes..."
 $conflictedFiles = git diff --name-only --diff-filter=U
 if ($conflictedFiles) {
     foreach ($file in $conflictedFiles) {
         git checkout --ours $file
         git add $file
     }
-}
 
-Write-Host "✅ Continuing rebase..."
-try {
-    git rebase --continue
-} catch {
-    Write-Host "ℹ️ No rebase in progress or already completed."
+    Write-Host "✅ Continuing rebase..."
+    try {
+        git rebase --continue
+    } catch {
+        Write-Host "⚠️ Rebase could not be continued automatically."
+    }
 }
 
 Write-Host "🚀 Pushing to remote..."
