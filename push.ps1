@@ -1,43 +1,49 @@
-set -e  # Stop if any command fails
+# PowerShell script for safe commit, rebase, and push
 
-# 💬 Step 1: Commit local changes
-echo "📦 Staging and committing local changes..."
+param (
+    [string]$CommitMessage = "Auto commit before combining with remote"
+)
+
+Write-Host "📦 Staging and committing local changes..."
 git add .
-git commit -m "${1:-Auto commit before combining with remote}" || echo "ℹ️ Nothing to commit."
-
-# 💬 Step 2: Stash the commit just in case we’re behind origin
-echo "📥 Stashing local changes before pull..."
-git stash push --include-untracked -m "temp-stash-before-pull"
-
-# 💬 Step 3: Pull remote changes with rebase
-echo "🔁 Pulling remote changes with rebase..."
-git pull --rebase || {
-  echo "❌ Pull failed. Aborting rebase..."
-  git rebase --abort
-  exit 1
+try {
+    git commit -m "$CommitMessage"
+} catch {
+    Write-Host "ℹ️ Nothing to commit."
 }
 
-# 💬 Step 4: Reapply stashed changes
-echo "📤 Applying stashed changes..."
+Write-Host "📥 Stashing changes before pulling..."
+git stash push --include-untracked -m "temp-stash-before-pull"
+
+Write-Host "🔁 Pulling latest changes with rebase..."
+try {
+    git pull --rebase
+} catch {
+    Write-Host "❌ Pull failed. Aborting rebase..."
+    git rebase --abort
+    exit 1
+}
+
+Write-Host "📤 Applying stashed changes..."
 git stash apply
 
-# 💬 Step 5: Auto-resolve all conflicts in favor of local (stashed) version
-echo "⚔️ Resolving conflicts by keeping your local changes..."
-CONFLICT_FILES=$(git diff --name-only --diff-filter=U)
-if [ -n "$CONFLICT_FILES" ]; then
-  echo "$CONFLICT_FILES" | while read -r file; do
-    git checkout --ours "$file"
-    git add "$file"
-  done
-fi
+Write-Host "⚔️ Resolving conflicts in favor of your local changes..."
+$conflictedFiles = git diff --name-only --diff-filter=U
+if ($conflictedFiles) {
+    foreach ($file in $conflictedFiles) {
+        git checkout --ours $file
+        git add $file
+    }
+}
 
-# 💬 Step 6: Finish rebase
-echo "✅ Continuing rebase..."
-git rebase --continue || echo "ℹ️ No rebase in progress."
+Write-Host "✅ Continuing rebase..."
+try {
+    git rebase --continue
+} catch {
+    Write-Host "ℹ️ No rebase in progress or already completed."
+}
 
-# 💬 Step 7: Push the combined result
-echo "🚀 Pushing changes to remote..."
+Write-Host "🚀 Pushing to remote..."
 git push
 
-# 💬 Done
-echo "🎉 Done! Your changes and remote changes have been combined and pushed successfully."
+Write-Host "🎉 Done! Your changes and remote updates are now combined and pushed."
